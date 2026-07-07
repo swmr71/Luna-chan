@@ -85,3 +85,29 @@ def manage_container_power(vmid: int, action: str, node: str = "pve") -> str:
         return f"Successfully initiated '{action}' command for CTID {vmid}."
     except Exception as e:
         return f"Failed to execute '{action}' for CTID {vmid}: {str(e)}"
+
+@tool("List All Proxmox Containers")
+def list_all_containers(node: str = "pve") -> str:
+    """
+    Retrieves a dynamic list of all LXC containers currently existing on the Proxmox node.
+    Returns their VMID, name, and current power status (running/stopped).
+    Use this tool when the user asks for a complete list of containers or wants to see what's on the server.
+    """
+    if not proxmox:
+        return "Proxmox API is not configured or failed to initialize."
+    try:
+        # Proxmoxから全LXCコンテナの情報を取得
+        containers = proxmox.nodes(node).lxc.get()
+        if not containers:
+            return "No containers found on this Proxmox node."
+        
+        res_lines = ["=== Live Proxmox Container List ==="]
+        for c in containers:
+            vmid = c.get("vmid")
+            name = c.get("name")
+            status = c.get("status") # running or stopped
+            res_lines.append(f"- CTID {vmid}: {name} ({status})")
+        
+        return "\n".join(res_lines)
+    except Exception as e:
+        return f"Failed to retrieve container list from Proxmox: {str(e)}"

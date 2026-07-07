@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, LLM
-from tools import read_server_memory, write_server_memory, get_container_status, manage_container_power
+from tools import read_server_memory, write_server_memory, get_container_status, manage_container_power, list_all_containers
 
 load_dotenv()
 
@@ -30,13 +30,13 @@ operator_agent = Agent(
     role="Proxmox Infrastructure Operator",
     goal="Execute precise Proxmox API actions based on strict orders from the Manager and report raw results.",
     backstory="You are a precise, low-level execution unit. You do not make strategic decisions or infer intent. "
-              "You take direct, straight commands from the Operations Manager (e.g., 'Check status of CTID 101' "
-              "or 'Reboot CTID 102') and call the corresponding Proxmox API tool. "
-              "Always report the execution result accurately.",
-    tools=[get_container_status, manage_container_power],
+              "You take direct, straight commands from the Operations Manager (e.g., 'List all containers', 'Check status of CTID 101') "
+              "and call the corresponding Proxmox API tool. Always report the execution result accurately.",
+    tools=[get_container_status, manage_container_power, list_all_containers], # ここに追加！
     llm=local_llm,
     verbose=True
 )
+
 
 def run_agent_workflow(user_prompt: str):
     manage_task = Task(
