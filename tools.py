@@ -22,15 +22,20 @@ except Exception as e:
 MEMORY_FILE = "server_knowledge.md"
 
 @tool("Read Long-term Server Memory")
-def read_server_memory() -> str:
+def read_server_memory(**kwargs) -> str:
     """
-    Reads the entire long-term memory file containing past server logs, notes, and facts.
-    Use this at the start of a task to check past context or troubleshooting history.
+    Reads the long-term infrastructure layout and server knowledge from the markdown file.
+    This tool takes NO arguments. Do not pass any path or filename.
     """
-    if not os.path.exists(MEMORY_FILE):
-        return "No long-term memory records found yet. The file is empty."
-    with open(MEMORY_FILE, "r", encoding="utf-8") as f:
-        return f.read()
+    # AIが勝手に path などを引数に入れてきてもクラッシュしないように **kwargs にしてある
+    memory_file = "server_knowledge.md"
+    if not os.path.exists(memory_file):
+        return "No long-term memory file found. It will be created when you write to it."
+    try:
+        with open(memory_file, "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception as e:
+        return f"Failed to read memory file: {str(e)}"
 
 @tool("Write Long-term Server Memory")
 def write_server_memory(content: str) -> str:
@@ -89,28 +94,51 @@ def manage_container_power(vmid: int, action: str, node: str = "pve") -> str:
 @tool("List All Proxmox Containers")
 def list_all_containers() -> str:
     """
-    Retrieves a live list of all LXC containers and VMs across ALL nodes in the Proxmox cluster.
-    Returns their VMID, name, status, and which node they belong to.
-    Use this tool when the user wants to see what's on the server or needs a complete list.
+    Retrieves a live list of all LXC containers and VMs across ALL nodes by iterating through each node.
+    Takes no arguments. Do not pass any node name or path.
     """
     if not proxmox:
         return "Proxmox API is not configured or failed to initialize."
     try:
-        # クラスター全体のリソース(LXCとVM)をノード横断で一括取得
-        resources = proxmox.cluster.resources.get(type="vm")
-        if not resources:
-            return "No containers or VMs found in the Proxmox cluster."
+        # 1. まずクラスター内の全物理ノードのリストを動的に取得
+        nodes = proxmox.nodes.get()
+        if not nodes:
+            return "No physical nodes found in the Proxmox cluster."
         
         res_lines = ["=== Live Proxmox Cluster Resource List ==="]
-        for r in resources:
-            vmid = r.get("vmid")
-            name = r.get("name")
-            status = r.get("status")  # running or stopped
-            node = r.get("node")      # 所属している物理ノード名
-            res_type = r.get("type")  # lxc または qemu(VM)
-            
-            res_lines.append(f"- [{node}] {res_type.upper()} {vmid}: {name} ({status})")
+        found_any = False
         
+        # 2. 各ノードを巡回して中身を回収する
+        for n in nodes:
+            node_name = n.get("node")
+            
+            # LXC（コンテナ）の回収
+            try:
+                containers = proxmox.nodes(node_name).lxc.get()
+                for c in containers:
+                    vmid = c.get("vmid")
+                    name = c.get("name")
+                    status = c.get("status")
+                    res_lines.append(f"- [{node_name}] LXC {vmid}: {name} ({status})")
+                    found_any = True
+            except Exception as e:
+                res_lines.append(f"- [{node_name}] Failed to fetch LXCs: {str(e)}")
+            
+            # QEMU（仮想マシン）の回収
+            try:
+                vms = proxmox.nodes(node_name).qemu.get()
+                for v in vms:
+                    vmid = v.get("vmid")
+                    name = v.get("name")
+                    status = v.get("status")
+                    res_lines.append(f"- [{node_name}] QEMU {vmid}: {name} ({status})")
+                    found_any = True
+            except Exception as e:
+                res_lines.append(f"- [{node_name}] Failed to fetch VMs: {str(e)}")
+        
+        if not found_any:
+            return "Connected to Proxmox, but no containers or VMs were found on any active node."
+            
         return "\n".join(res_lines)
     except Exception as e:
-        return f"Failed to retrieve cluster resources from Proxmox: {str(e)}"
+        return f"Failed to retrieve cluster nodes from Proxmox: {str(e)}"
