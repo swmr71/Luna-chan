@@ -6,10 +6,10 @@ from proxmoxer import ProxmoxAPI
 load_dotenv()
 
 # 環境変数を取得
-host = os.getenv("PROXMOX_HOST")
-user = os.getenv("PROXMOX_USER")
-token_name = os.getenv("PROXMOX_TOKEN_NAME")
-token_value = os.getenv("PROXMOX_TOKEN_VALUE")
+host = os.getenv("PVE_URL")         # 例: PROXMOX_HOST から PVE_URL などに変更
+user = os.getenv("PVE_USER")         # 例: PROXMOX_USER から PVE_USER などに変更
+token_name = os.getenv("PVE_TOKEN_NAME")
+token_value = os.getenv("PVE_TOKEN_VALUE")
 
 print("--- Proxmox API 接続テスト開始 ---")
 print(f"接続先ホスト: {host}")
