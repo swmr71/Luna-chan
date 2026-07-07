@@ -13,7 +13,6 @@
     - *Example*: CTID 102 corresponds to IP `10.2.1.2`.
 
 ## 2. Proxmox Container & VM List
-- CTID 100: NextCloud-temp
 - CTID 101: NextCloud
 - CTID 102: Web-Front1
 - CTID 103: Github
@@ -24,8 +23,6 @@
 - CTID 108: MS-1-SQL
 - CTID 109: MS-R2
 - CTID 110: MS-2
-- CTID 117: Web-SRS
-- CTID 118: FFmpeg
 - CTID 119: Video
 - CTID 301: RAKU-Server
 - CTID 302: RAKUWEB-Server
