@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Environment variables (Sensitive)
+.env
+
+# Local AI Memory & Cache
+.crewai/
