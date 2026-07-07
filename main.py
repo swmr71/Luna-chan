@@ -24,21 +24,20 @@ luna_agent = Agent(
 )
 
 def run_agent_workflow(user_prompt: str):
-    # 【タスク1】必要な情報をProxmoxから集めてくるタスク
+    # 【タスク1】必要な情報をProxmoxから集めてくるタスク（目的だけを伝える）
     fetch_task = Task(
-        description=f"Analyze the user request: '{user_prompt}'\\n"
-                    f"Fetch the necessary data from the Proxmox cluster using 'List All Proxmox Containers' or 'Get Proxmox Container Status'. "
-                    f"If the request is only about reading the memory, use 'Read Long-term Server Memory'.",
-        expected_output="The detailed live server or container information retrieved from the tools.",
+        description=f"The user request is: '{user_prompt}'\n"
+                    f"Retrieve the current real-time status or list of all containers and VMs from the Proxmox cluster.",
+        expected_output="A detailed and factual list of all containers, VMs, and their states retrieved from the cluster.",
         agent=luna_agent
     )
 
-    # 【タスク2】集めたデータを元に、保存処理とユーザーへの返答を行うタスク
+    # 【タスク2】集めたデータを元に、保存処理とユーザーへの返答を行うタスク（ツール名は出さない）
     save_and_respond_task = Task(
-        description=f"Review the user request: '{user_prompt}' and the data fetched in the previous task.\\n"
-                    f"CRITICAL: If the user explicitly asked to save or note down the info (e.g., '保存して', 'メモに保存して'), you MUST call 'Write Long-term Server Memory' to write the fetched data into the file. Do not just say you saved it; actually executing the tool is mandatory.\\n"
-                    f"Finally, reply to the user in clean Japanese.",
-        expected_output="A final response to the user in Japanese, confirming that the data has been successfully written to the memory file if requested.",
+        description=f"The user request is: '{user_prompt}'\n"
+                    f"Based on the fetched data from the previous task, save the container list into the long-term server memory file because the user explicitly requested to save or note it down.\n"
+                    f"After successfully saving the data, provide a summary of the container list and confirm that it has been saved to the user in natural, friendly Japanese.",
+        expected_output="A final response to the user in clean Japanese, listing the containers and confirming the successful save operation.",
         agent=luna_agent
     )
 
