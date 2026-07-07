@@ -25,10 +25,11 @@ luna_agent = Agent(
 
 def run_agent_workflow(user_prompt: str):
     server_task = Task(
+        # ここの指示文（特に3番）を「絶対実行」に強化！
         description=f"Execute the user request: '{user_prompt}'\\n"
                     f"1. Check the server layout using 'Read Long-term Server Memory' if needed.\\n"
                     f"2. To get a live list or status, use 'List All Proxmox Containers' or 'Get Proxmox Container Status'.\\n"
-                    f"3. If any change or update occurs, save it using 'Write Long-term Server Memory'.\\n"
+                    f"3. CRITICAL: If the user explicitly asks to 'save', 'memorize', or 'keep a note' (e.g., '保存して', 'メモに保存して'), you MUST use 'Write Long-term Server Memory' to save the fetched information into the file. Do not skip this step under any circumstances.\\n"
                     f"4. Reply to the user in clean Japanese.",
         expected_output="A factual response in Japanese based on the actual tool results.",
         agent=luna_agent
