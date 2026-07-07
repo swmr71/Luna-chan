@@ -24,20 +24,28 @@ luna_agent = Agent(
 )
 
 def run_agent_workflow(user_prompt: str):
-    server_task = Task(
-        # ここの指示文（特に3番）を「絶対実行」に強化！
-        description=f"Execute the user request: '{user_prompt}'\\n"
-                    f"1. Check the server layout using 'Read Long-term Server Memory' if needed.\\n"
-                    f"2. To get a live list or status, use 'List All Proxmox Containers' or 'Get Proxmox Container Status'.\\n"
-                    f"3. CRITICAL: If the user explicitly asks to 'save', 'memorize', or 'keep a note' (e.g., '保存して', 'メモに保存して'), you MUST use 'Write Long-term Server Memory' to save the fetched information into the file. Do not skip this step under any circumstances.\\n"
-                    f"4. Reply to the user in clean Japanese.",
-        expected_output="A factual response in Japanese based on the actual tool results.",
+    # 【タスク1】必要な情報をProxmoxから集めてくるタスク
+    fetch_task = Task(
+        description=f"Analyze the user request: '{user_prompt}'\\n"
+                    f"Fetch the necessary data from the Proxmox cluster using 'List All Proxmox Containers' or 'Get Proxmox Container Status'. "
+                    f"If the request is only about reading the memory, use 'Read Long-term Server Memory'.",
+        expected_output="The detailed live server or container information retrieved from the tools.",
         agent=luna_agent
     )
 
+    # 【タスク2】集めたデータを元に、保存処理とユーザーへの返答を行うタスク
+    save_and_respond_task = Task(
+        description=f"Review the user request: '{user_prompt}' and the data fetched in the previous task.\\n"
+                    f"CRITICAL: If the user explicitly asked to save or note down the info (e.g., '保存して', 'メモに保存して'), you MUST call 'Write Long-term Server Memory' to write the fetched data into the file. Do not just say you saved it; actually executing the tool is mandatory.\\n"
+                    f"Finally, reply to the user in clean Japanese.",
+        expected_output="A final response to the user in Japanese, confirming that the data has been successfully written to the memory file if requested.",
+        agent=luna_agent
+    )
+
+    # crewに2つのタスクを順番に実行させる
     crew = Crew(
         agents=[luna_agent],
-        tasks=[server_task],
+        tasks=[fetch_task, save_and_respond_task],
         verbose=True,
         memory=False
     )
