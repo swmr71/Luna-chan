@@ -87,27 +87,30 @@ def manage_container_power(vmid: int, action: str, node: str = "pve") -> str:
         return f"Failed to execute '{action}' for CTID {vmid}: {str(e)}"
 
 @tool("List All Proxmox Containers")
-def list_all_containers(node: str = "pve") -> str:
+def list_all_containers() -> str:
     """
-    Retrieves a dynamic list of all LXC containers currently existing on the Proxmox node.
-    Returns their VMID, name, and current power status (running/stopped).
-    Use this tool when the user asks for a complete list of containers or wants to see what's on the server.
+    Retrieves a live list of all LXC containers and VMs across ALL nodes in the Proxmox cluster.
+    Returns their VMID, name, status, and which node they belong to.
+    Use this tool when the user wants to see what's on the server or needs a complete list.
     """
     if not proxmox:
         return "Proxmox API is not configured or failed to initialize."
     try:
-        # Proxmoxから全LXCコンテナの情報を取得
-        containers = proxmox.nodes(node).lxc.get()
-        if not containers:
-            return "No containers found on this Proxmox node."
+        # クラスター全体のリソース(LXCとVM)をノード横断で一括取得
+        resources = proxmox.cluster.resources.get(type="vm")
+        if not resources:
+            return "No containers or VMs found in the Proxmox cluster."
         
-        res_lines = ["=== Live Proxmox Container List ==="]
-        for c in containers:
-            vmid = c.get("vmid")
-            name = c.get("name")
-            status = c.get("status") # running or stopped
-            res_lines.append(f"- CTID {vmid}: {name} ({status})")
+        res_lines = ["=== Live Proxmox Cluster Resource List ==="]
+        for r in resources:
+            vmid = r.get("vmid")
+            name = r.get("name")
+            status = r.get("status")  # running or stopped
+            node = r.get("node")      # 所属している物理ノード名
+            res_type = r.get("type")  # lxc または qemu(VM)
+            
+            res_lines.append(f"- [{node}] {res_type.upper()} {vmid}: {name} ({status})")
         
         return "\n".join(res_lines)
     except Exception as e:
-        return f"Failed to retrieve container list from Proxmox: {str(e)}"
+        return f"Failed to retrieve cluster resources from Proxmox: {str(e)}"
