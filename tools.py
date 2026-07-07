@@ -92,11 +92,12 @@ def manage_container_power(vmid: int, action: str, node: str = "pve") -> str:
         return f"Failed to execute '{action}' for CTID {vmid}: {str(e)}"
 
 @tool("List All Proxmox Containers")
-def list_all_containers() -> str:
+def list_all_containers(**kwargs) -> str:
     """
     Retrieves a live list of all LXC containers and VMs across ALL nodes by iterating through each node.
     Takes no arguments. Do not pass any node name or path.
     """
+    # AIが空の引数（ {'': ''} など）を渡してきても、**kwargs がすべて吸収して無視します
     if not proxmox:
         return "Proxmox API is not configured or failed to initialize."
     try:
