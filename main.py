@@ -78,10 +78,12 @@ def chat_with_luna(user_message: str) -> str:
                 tool_result = execute_tool(tool_name, tool_input)
                 print(f"   Result: {tool_result[:100]}...")
 
-                function_response_part = types.Part.from_function_response(
-                    name=tool_name,
-                    id=function_call.id,
-                    response={"result": tool_result},
+                function_response_part = types.Part(
+                    function_response=types.FunctionResponse(
+                        name=tool_name,
+                        id=function_call.id,
+                        response={"result": tool_result},
+                    )
                 )
                 contents.append(types.Content(role="user", parts=[function_response_part]))
     
