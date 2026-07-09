@@ -1,4 +1,9 @@
-crewai>=0.50.0
+# Google Generative AI (Gemini API)
+google-generativeai>=0.4.0
+
+# Proxmox 管理
 proxmoxer>=2.1.0
+
+# その他
 requests>=2.31.0
 python-dotenv>=1.0.1

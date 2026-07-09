@@ -1,10 +1,11 @@
 import os
-from crewai.tools import tool
+import json
 from proxmoxer import ProxmoxAPI
 from dotenv import load_dotenv
 
 load_dotenv()
 
+# Proxmox API 初期化
 try:
     endpoint = os.getenv("PVE_ENDPOINT", "https://10.2.0.1:8006/api2/json")
     host = endpoint.split("//")[1].split(":")[0]
@@ -17,91 +18,90 @@ try:
         verify_ssl=False
     )
 except Exception as e:
+    print(f"⚠️ Proxmox API initialization failed: {e}")
     proxmox = None
 
-MEMORY_FILE = "server_knowledge.md"
+# ツール定義（Google Generative AI の Tool Calling フォーマット）
+TOOLS = [
+    {
+        "name": "list_all_containers",
+        "description": "Retrieves a live list of all LXC containers and VMs across all Proxmox nodes.",
+        "parameters": {
+            "type": "object",
+            "properties": {}
+        }
+    },
+    {
+        "name": "get_container_status",
+        "description": "Retrieves the current status and resource usage of a specific LXC container.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "vmid": {
+                    "type": "integer",
+                    "description": "The Container ID (CTID) to check (e.g., 101, 102)"
+                },
+                "node": {
+                    "type": "string",
+                    "description": "The Proxmox node name (default: 'pve')"
+                }
+            },
+            "required": ["vmid"]
+        }
+    },
+    {
+        "name": "manage_container_power",
+        "description": "Controls the power state of a specific LXC container (start, stop, shutdown, reboot).",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "vmid": {
+                    "type": "integer",
+                    "description": "The Container ID (CTID) to manage"
+                },
+                "action": {
+                    "type": "string",
+                    "enum": ["start", "stop", "shutdown", "reboot"],
+                    "description": "The power action to perform"
+                },
+                "node": {
+                    "type": "string",
+                    "description": "The Proxmox node name (default: 'pve')"
+                }
+            },
+            "required": ["vmid", "action"]
+        }
+    },
+    {
+        "name": "read_server_knowledge",
+        "description": "Reads the long-term infrastructure layout and server knowledge from the knowledge file.",
+        "parameters": {
+            "type": "object",
+            "properties": {}
+        }
+    },
+    {
+        "name": "write_server_knowledge",
+        "description": "Appends important server facts, troubleshooting logs, or configuration changes to the knowledge file.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "description": "The content to append to the server knowledge file"
+                }
+            },
+            "required": ["content"]
+        }
+    }
+]
 
-@tool("Read Long-term Server Memory")
-def read_server_memory(**kwargs) -> str:
-    """
-    Reads the long-term infrastructure layout and server knowledge from the markdown file.
-    This tool takes NO arguments. Do not pass any path or filename.
-    """
-    # AIが勝手に path などを引数に入れてきてもクラッシュしないように **kwargs にしてある
-    memory_file = "server_knowledge.md"
-    if not os.path.exists(memory_file):
-        return "No long-term memory file found. It will be created when you write to it."
-    try:
-        with open(memory_file, "r", encoding="utf-8") as f:
-            return f.read()
-    except Exception as e:
-        return f"Failed to read memory file: {str(e)}"
-
-@tool("Write Long-term Server Memory")
-def write_server_memory(content: str) -> str:
-    """
-    Appends important server facts, troubleshooting logs, or configuration changes to the long-term memory file.
-    Use this when you learn something new about the server or execute an important action that should be remembered.
-    """
-    with open(MEMORY_FILE, "a", encoding="utf-8") as f:
-        f.write(f"- {content}\n")
-    return "Memory saved successfully to server_knowledge.md."
-
-@tool("Get Proxmox Container Status")
-def get_container_status(vmid: int, node: str = "pve") -> str:
-    """
-    Retrieves the current status and resource usage of a specific LXC container on Proxmox.
-    Use this tool when the user or Master asks about the status, CPU, or memory of a specific container ID.
-    
-    Args:
-        vmid (int): The Container ID (CTID) to check (e.g., 101, 102).
-        node (str): The Proxmox node name. Defaults to 'pve'.
-    """
+# ツール実装関数
+def list_all_containers() -> str:
+    """Proxmox 全コンテナ・VM の一覧を取得"""
     if not proxmox:
-        return "Proxmox API is not configured or failed to initialize."
+        return "❌ Proxmox API is not configured."
     try:
-        status = proxmox.nodes(node).lxc(vmid).status.current.get()
-        name = status.get("name", "Unknown")
-        state = status.get("status", "unknown")
-        cpu = round(status.get("cpu", 0) * 100, 1)
-        mem = round(status.get("mem", 0) / (1024 ** 3), 2)
-        maxmem = round(status.get("maxmem", 0) / (1024 ** 3), 2)
-        return f"Container [{name}] (ID: {vmid}) Status: {state} | CPU: {cpu}% | Mem: {mem}GB/{maxmem}GB"
-    except Exception as e:
-        return f"Failed to get status for CTID {vmid}: {str(e)}"
-
-@tool("Manage Proxmox Container Power")
-def manage_container_power(vmid: int, action: str, node: str = "pve") -> str:
-    """
-    Controls the power state of a specific LXC container on Proxmox (start, stop, shutdown, reboot).
-    Use this tool only when receiving a direct and clear order to change a container state.
-    
-    Args:
-        vmid (int): The Container ID (CTID) to manage.
-        action (str): The power action to perform. Allowed values: 'start', 'stop', 'shutdown', 'reboot'.
-        node (str): The Proxmox node name. Defaults to 'pve'.
-    """
-    if not proxmox:
-        return "Proxmox API is not configured or failed to initialize."
-    if action not in ['start', 'stop', 'shutdown', 'reboot']:
-        return f"Invalid action '{action}'. Allowed: start, stop, shutdown, reboot."
-    try:
-        proxmox.nodes(node).lxc(vmid).status.post(action)
-        return f"Successfully initiated '{action}' command for CTID {vmid}."
-    except Exception as e:
-        return f"Failed to execute '{action}' for CTID {vmid}: {str(e)}"
-
-@tool("List All Proxmox Containers")
-def list_all_containers(**kwargs) -> str:
-    """
-    Retrieves a live list of all LXC containers and VMs across ALL nodes by iterating through each node.
-    Takes no arguments. Do not pass any node name or path.
-    """
-    # AIが空の引数（ {'': ''} など）を渡してきても、**kwargs がすべて吸収して無視します
-    if not proxmox:
-        return "Proxmox API is not configured or failed to initialize."
-    try:
-        # 1. まずクラスター内の全物理ノードのリストを動的に取得
         nodes = proxmox.nodes.get()
         if not nodes:
             return "No physical nodes found in the Proxmox cluster."
@@ -109,11 +109,10 @@ def list_all_containers(**kwargs) -> str:
         res_lines = ["=== Live Proxmox Cluster Resource List ==="]
         found_any = False
         
-        # 2. 各ノードを巡回して中身を回収する
         for n in nodes:
             node_name = n.get("node")
             
-            # LXC（コンテナ）の回収
+            # LXC コンテナ
             try:
                 containers = proxmox.nodes(node_name).lxc.get()
                 for c in containers:
@@ -125,7 +124,7 @@ def list_all_containers(**kwargs) -> str:
             except Exception as e:
                 res_lines.append(f"- [{node_name}] Failed to fetch LXCs: {str(e)}")
             
-            # QEMU（仮想マシン）の回収
+            # QEMU VM
             try:
                 vms = proxmox.nodes(node_name).qemu.get()
                 for v in vms:
@@ -138,8 +137,78 @@ def list_all_containers(**kwargs) -> str:
                 res_lines.append(f"- [{node_name}] Failed to fetch VMs: {str(e)}")
         
         if not found_any:
-            return "Connected to Proxmox, but no containers or VMs were found on any active node."
+            return "Connected to Proxmox, but no containers or VMs were found."
             
         return "\n".join(res_lines)
     except Exception as e:
-        return f"Failed to retrieve cluster nodes from Proxmox: {str(e)}"
+        return f"❌ Failed to retrieve cluster: {str(e)}"
+
+def get_container_status(vmid: int, node: str = "pve") -> str:
+    """指定コンテナのステータスを取得"""
+    if not proxmox:
+        return "❌ Proxmox API is not configured."
+    try:
+        status = proxmox.nodes(node).lxc(vmid).status.current.get()
+        name = status.get("name", "Unknown")
+        state = status.get("status", "unknown")
+        cpu = round(status.get("cpu", 0) * 100, 1)
+        mem = round(status.get("mem", 0) / (1024 ** 3), 2)
+        maxmem = round(status.get("maxmem", 0) / (1024 ** 3), 2)
+        return f"✅ Container [{name}] (ID: {vmid}) | Status: {state} | CPU: {cpu}% | Mem: {mem}GB/{maxmem}GB"
+    except Exception as e:
+        return f"❌ Failed to get status for CTID {vmid}: {str(e)}"
+
+def manage_container_power(vmid: int, action: str, node: str = "pve") -> str:
+    """コンテナの電源を制御"""
+    if not proxmox:
+        return "❌ Proxmox API is not configured."
+    if action not in ['start', 'stop', 'shutdown', 'reboot']:
+        return f"❌ Invalid action '{action}'. Allowed: start, stop, shutdown, reboot."
+    try:
+        proxmox.nodes(node).lxc(vmid).status.post(action)
+        return f"✅ Successfully initiated '{action}' command for CTID {vmid}."
+    except Exception as e:
+        return f"❌ Failed to execute '{action}' for CTID {vmid}: {str(e)}"
+
+def read_server_knowledge() -> str:
+    """サーバー知識ファイルを読む"""
+    knowledge_file = "server_knowledge.md"
+    if not os.path.exists(knowledge_file):
+        return "No server knowledge file found yet."
+    try:
+        with open(knowledge_file, "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception as e:
+        return f"❌ Failed to read knowledge file: {str(e)}"
+
+def write_server_knowledge(content: str) -> str:
+    """サーバー知識ファイルに追記"""
+    knowledge_file = "server_knowledge.md"
+    try:
+        with open(knowledge_file, "a", encoding="utf-8") as f:
+            f.write(f"- {content}\n")
+        return "✅ Server knowledge saved successfully."
+    except Exception as e:
+        return f"❌ Failed to save knowledge: {str(e)}"
+
+# ツール実行ディスパッチャ
+def execute_tool(tool_name: str, tool_input: dict) -> str:
+    """ツール名と入力に基づいてツールを実行"""
+    if tool_name == "list_all_containers":
+        return list_all_containers()
+    elif tool_name == "get_container_status":
+        vmid = tool_input.get("vmid")
+        node = tool_input.get("node", "pve")
+        return get_container_status(vmid, node)
+    elif tool_name == "manage_container_power":
+        vmid = tool_input.get("vmid")
+        action = tool_input.get("action")
+        node = tool_input.get("node", "pve")
+        return manage_container_power(vmid, action, node)
+    elif tool_name == "read_server_knowledge":
+        return read_server_knowledge()
+    elif tool_name == "write_server_knowledge":
+        content = tool_input.get("content", "")
+        return write_server_knowledge(content)
+    else:
+        return f"❌ Unknown tool: {tool_name}"
