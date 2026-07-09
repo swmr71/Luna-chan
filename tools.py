@@ -24,7 +24,6 @@ except Exception as e:
 # ツール定義（Google Generative AI の Tool Calling フォーマット）
 TOOLS = [
     {
-        "type": "function",
         "name": "list_all_containers",
         "description": "Retrieves a live list of all LXC containers and VMs across all Proxmox nodes.",
         "parameters": {
@@ -33,7 +32,6 @@ TOOLS = [
         }
     },
     {
-        "type": "function",
         "name": "get_container_status",
         "description": "Retrieves the current status and resource usage of a specific LXC container.",
         "parameters": {
@@ -52,7 +50,6 @@ TOOLS = [
         }
     },
     {
-        "type": "function",
         "name": "manage_container_power",
         "description": "Controls the power state of a specific LXC container (start, stop, shutdown, reboot).",
         "parameters": {
@@ -76,7 +73,6 @@ TOOLS = [
         }
     },
     {
-        "type": "function",
         "name": "read_server_knowledge",
         "description": "Reads the long-term infrastructure layout and server knowledge from the knowledge file.",
         "parameters": {
@@ -85,7 +81,6 @@ TOOLS = [
         }
     },
     {
-        "type": "function",
         "name": "write_server_knowledge",
         "description": "Appends important server facts, troubleshooting logs, or configuration changes to the knowledge file.",
         "parameters": {
