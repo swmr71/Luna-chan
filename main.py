@@ -1,7 +1,7 @@
 import os
-import json
 from dotenv import load_dotenv
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 from luna import Luna
 from tools import TOOLS, execute_tool
@@ -14,7 +14,7 @@ if not API_KEY:
     print("❌ GOOGLE_API_KEY is not set. Please set it in .env")
     exit(1)
 
-genai.configure(api_key=API_KEY)
+client = genai.Client(api_key=API_KEY)
 
 # Luna ちゃんの初期化
 luna = Luna(papa_name="Papa")
@@ -26,79 +26,64 @@ print("Type 'exit' or 'quit' to end the conversation.")
 print("=" * 50)
 
 def chat_with_luna(user_message: str) -> str:
-    """Google Generative AI を使って Luna と会話"""
-    
-    # システムプロンプトを取得
+    """Google Gen AI を使って Luna と会話"""
+
     system_prompt = luna.get_full_context()
-    
-    # メッセージ履歴（シンプル版）
-    messages = [
-        {"role": "user", "content": user_message}
-    ]
+
+    generation_config = types.GenerateContentConfig(
+        system_instruction=system_prompt,
+        tools=[types.Tool(function_declarations=TOOLS)],
+        tool_config=types.ToolConfig(
+            function_calling_config=types.FunctionCallingConfig(mode="AUTO")
+        ),
+    )
+
+    contents = [types.Content(role="user", parts=[types.Part(text=user_message)])]
     
     try:
-        # Google Generative AI を使用
-        model = genai.GenerativeModel(
-            model_name="gemini-3.5-flash",  # 最新の高速モデル
-            system_instruction=system_prompt,
-            tools=TOOLS
-        )
-        
-        # 初回呼び出し
-        response = model.generate_content(
-            messages,
-            tool_config=genai.types.tool_config.ToolConfig(
-                function_calling_config=genai.types.tool_config.FunctionCallingConfig("AUTO")
+        while True:
+            response = client.models.generate_content(
+                model="gemini-3.5-flash",
+                contents=contents,
+                config=generation_config,
             )
-        )
-        
-        # Tool Calling ループ
-        while response.candidates[0].content.parts:
-            part = response.candidates[0].content.parts[0]
-            
-            # テキスト応答の場合
-            if hasattr(part, "text"):
-                return part.text
-            
-            # ツール呼び出しの場合
-            if part.function_call:
-                tool_name = part.function_call.name
-                tool_input = {k: v for k, v in part.function_call.args.items()}
-                
+
+            if not response.candidates:
+                return "Luna is thinking... (No response generated)"
+
+            response_content = response.candidates[0].content
+            function_calls = []
+
+            for part in response_content.parts:
+                if getattr(part, "function_call", None):
+                    function_calls.append(part.function_call)
+
+            if not function_calls:
+                if response.text:
+                    return response.text
+
+                for part in response_content.parts:
+                    if getattr(part, "text", None):
+                        return part.text
+
+                return "Luna is thinking... (No response generated)"
+
+            contents.append(response_content)
+
+            for function_call in function_calls:
+                tool_name = function_call.name
+                tool_input = dict(function_call.args or {})
+
                 print(f"\n🔧 Luna is using tool: {tool_name}")
                 tool_result = execute_tool(tool_name, tool_input)
                 print(f"   Result: {tool_result[:100]}...")
-                
-                # ツール結果を含めて再度実行
-                messages.append({"role": "model", "content": response.candidates[0].content})
-                messages.append({
-                    "role": "user",
-                    "content": [
-                        {
-                            "function_response": {
-                                "name": tool_name,
-                                "response": {"result": tool_result}
-                            }
-                        }
-                    ]
-                })
-                
-                response = model.generate_content(
-                    messages,
-                    tool_config=genai.types.tool_config.ToolConfig(
-                        function_calling_config=genai.types.tool_config.FunctionCallingConfig("AUTO")
-                    )
+
+                function_response_part = types.Part.from_function_response(
+                    name=tool_name,
+                    id=function_call.id,
+                    response={"result": tool_result},
                 )
-            else:
-                break
-        
-        # 最終的な応答を抽出
-        if response.candidates[0].content.parts:
-            for part in response.candidates[0].content.parts:
-                if hasattr(part, "text"):
-                    return part.text
-        
-        return "Luna is thinking... (No response generated)"
+                contents.append(types.Content(role="user", parts=[function_response_part]))
     
     except Exception as e:
         return f"❌ Error: {str(e)}\n💡 Make sure GOOGLE_API_KEY is set correctly."

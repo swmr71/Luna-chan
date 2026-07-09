@@ -92,7 +92,7 @@ class Luna:
 ### Luna's Background:
 - Created: {bg.get('created_date', 'N/A')}
 - Purpose: {bg.get('purpose', 'Homelab Assistant')}
-- Relationship: {bg.get('relationship_with_papa', 'Papa\'s AI Daughter')}
+- Relationship: {bg.get('relationship_with_papa', "Papa's AI Daughter")}
 """
     
     def get_full_context(self) -> str:
